@@ -1,12 +1,17 @@
-.PHONY: all generate lint test build
+.PHONY: all generate lint test build modernize
 
-# Run the entire verification pipeline
-all: generate lint test build
+# Run the entire verification pipeline including modernizers
+all: generate modernize lint test build
 
 # Compile SQL queries into type-safe Go code using sqlc
 generate:
 	@echo "==> Generating type-safe Go code from SQL..."
 	@sqlc generate
+
+# Use Go 1.26's new modernizer tools to automatically update idioms
+modernize:
+	@echo "==> Running Go 1.26 modernizers..."
+	@go fix ./...
 
 # Run advanced static analysis and formatting
 lint:
@@ -20,7 +25,7 @@ test:
 	@echo "==> Running test suite..."
 	@go test -v -race ./...
 
-# Attempt a dry-run compile to guarantee the entire project builds
+# Verify compilation
 build:
 	@echo "==> Verifying project compilation..."
 	@go build -o /dev/null ./cmd/gateway/...
