@@ -18,8 +18,8 @@ Demo-first, local-first. Sync pipeline: upload → in-memory redact → gRPC aud
          │  HTTPS + Server-Sent Events
          ▼
   ┌─────────────────────────────────────────────────────────────┐
-  │ Go 1.22+ API Gateway & Ingestion (Fiber)                    │
-  │ • Demo session cookie (anonymous)                           │
+  │ Go API Gateway & Ingestion (Fiber)                          │
+  │ • Demo session cookie (anonymous) — Slice 1+                │
   │ • Streams PDF/CSV uploads in memory (no disk write in v1) │
   │ • Regex/pattern PII redaction before any LLM hop            │
   │ • SSE progress + REST for reports / subscription actions    │
@@ -30,7 +30,7 @@ Demo-first, local-first. Sync pipeline: upload → in-memory redact → gRPC aud
                                  ▼
   ┌─────────────────────────────────────────────────────────────┐
   │ Python 3.12+ AI & Auditor Service                           │
-  │ • Deterministic CSV/PDF parse + Ollama fallback             │
+  │ • Deterministic CSV/PDF parse + Ollama fallback (later)     │
   │ • Levenshtein merchant grouping + creep detection           │
   │ • Seeded merchant registry + AI enrichment cache            │
   └──────────────────────────────┬──────────────────────────────┘
@@ -42,13 +42,67 @@ Demo-first, local-first. Sync pipeline: upload → in-memory redact → gRPC aud
 
 ### Deferred (Phase Cloud)
 
-Not required for MVP. Documented for a later portfolio slice:
+Not required for MVP: AWS ECS/ALB/RDS, S3+KMS spill, Terraform, real auth, Redis/SQS.
 
-- AWS ECS Fargate, ALB, RDS
-- S3 + KMS for large-file spill / staging
-- Terraform IaC
-- Real user auth
-- Redis / SQS only if the processing model becomes async
+---
+
+## Slice 0 — Skeleton (current)
+
+Compose brings up Postgres, Go gateway, Python AI, and Next dashboard. Health endpoints only — no upload/audit yet.
+
+### Prerequisites
+
+- Go 1.22+ (tested with 1.26)
+- Python 3.12+
+- Node.js 24+ (nvm recommended)
+- Docker and Docker Compose
+- Optional for regenerating protos: `protoc` in `tools/bin`, `protoc-gen-go`, `protoc-gen-go-grpc`
+
+### Quickstart A — full Compose demo
+
+```bash
+cp .env.example .env
+docker compose up --build -d
+
+curl -sf http://localhost:8080/healthz   # gateway (+ DB ping)
+curl -sf http://localhost:8081/healthz   # AI HTTP
+curl -sf http://localhost:3000           # dashboard shell
+
+docker compose ps   # gateway + ai should be healthy
+```
+
+### Quickstart B — hybrid (Compose backend + host Next)
+
+```bash
+docker compose up --build -d postgres gateway ai
+cd web/dashboard
+cp .env.example .env.local
+npm install
+npm run dev
+# open http://localhost:3000
+```
+
+### Go verification
+
+```bash
+make generate test build
+```
+
+### Proto regeneration
+
+Checked-in stubs live under `pkg/auditorpb/` and `services/ai/app/pb/`. To regenerate:
+
+```bash
+# Install once (example):
+# curl -sL https://github.com/protocolbuffers/protobuf/releases/download/v29.3/protoc-29.3-linux-x86_64.zip
+# extract bin/protoc -> tools/bin/protoc
+# go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.5
+# go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.5.1
+
+make proto
+```
+
+After `make proto`, ensure `services/ai/app/pb/auditor_pb2_grpc.py` imports `from app.pb import auditor_pb2 as ...` (the Makefile rewrites this).
 
 ---
 
@@ -56,43 +110,21 @@ Not required for MVP. Documented for a later portfolio slice:
 
 | Layer | Choice |
 |---|---|
-| Gateway | Go 1.22+, Fiber, sqlc + pgx, gRPC client |
-| Auditor | Python 3.12+, FastAPI host + gRPC server, PyMuPDF, Pandas, Levenshtein |
-| LLM | Local Ollama (LiteLLM-compatible client); cloud keys optional |
-| Frontend | Next.js 15, React 19, TypeScript, Tailwind, Shadcn/UI, SSE |
+| Gateway | Go, Fiber, sqlc + pgx, gRPC client |
+| Auditor | Python 3.12+, FastAPI health + gRPC server |
+| LLM | Local Ollama (later slices) |
+| Frontend | Next.js 15, React 19, TypeScript, Tailwind, Node 24+ |
 | Data | PostgreSQL 16 via Docker Compose |
-| Contracts | Checked-in protobuf + HTTP/SSE API in SPEC.md |
+| Contracts | `api/proto/auditor/v1/auditor.proto` + HTTP/SSE in SPEC.md |
 
 ---
 
 ## Privacy Guarantee
 
-1. The **Go gateway** accepts statements in an in-memory stream.
-2. **Regex/pattern redaction** strips IBAN/account-like digit runs and common PII patterns **before** Python or any LLM sees the content. v1 does not claim NLP name entity recognition.
-3. Only redacted transaction text (and, for enrichment, **merchant names only**) may reach local Ollama.
+1. The **Go gateway** accepts statements in an in-memory stream (Slice 1+).
+2. **Regex/pattern redaction** strips IBAN/account-like digit runs before Python/LLM.
+3. Enrichment sends **merchant names only**.
 4. Raw uploads are **not** persisted in v1.
-
----
-
-## Local Development
-
-### Prerequisites
-
-- Go 1.22+
-- Python 3.12+
-- Node.js 20+
-- Docker and Docker Compose
-
-### Quickstart (target after Slice 0)
-
-```bash
-git clone git@github.com:uiansol/vigil-auditor.git
-cd vigil-auditor
-docker compose up -d
-make all
-```
-
-See [SPEC.md](SPEC.md) §14 for the Slice 0–6 learning roadmap. Infrastructure files (`docker-compose.yml`, schema, services) land with Slice 0.
 
 ---
 
@@ -101,4 +133,3 @@ See [SPEC.md](SPEC.md) §14 for the Slice 0–6 learning roadmap. Infrastructure
 - **Stream redactor:** Concurrent in-memory redaction in Go before any AI hop.
 - **Fuzzy merchant normalizer:** Levenshtein grouping across billing-code variants.
 - **Cancellation map:** Seeded registry + AI cache feeding Cancel-drawer UX with friction scores.
-```

@@ -56,8 +56,13 @@ yarn-error.log*
 .env
 .env.*
 !.env.example
+!**/.env.example
 /tmp/
 /data/
 /uploads/
 *.pdf
 *.csv
+
+# Local toolchain downloads (protoc binary, etc.)
+/tools/bin/
+services/ai/.venv/

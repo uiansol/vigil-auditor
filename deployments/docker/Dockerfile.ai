@@ -1,0 +1,16 @@
+FROM python:3.12-slim
+
+WORKDIR /app
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    AI_HTTP_ADDR=0.0.0.0:8081 \
+    AI_GRPC_ADDR=0.0.0.0:50051
+
+COPY services/ai/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY services/ai/app ./app
+
+EXPOSE 8081 50051
+CMD ["python", "-m", "app.main"]

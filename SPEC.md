@@ -371,7 +371,7 @@ Do not start a later slice’s infra (e.g. S3) until the prior product slice is 
 
 - Go 1.22+
 - Python 3.12+
-- Node.js 20+
+- Node.js 24+
 - Docker and Docker Compose
 - Ollama (via Compose or host) for LLM slices
 

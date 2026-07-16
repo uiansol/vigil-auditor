@@ -1,0 +1,70 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: vigil
+      POSTGRES_PASSWORD: vigil
+      POSTGRES_DB: vigil
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./deployments/db/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vigil -d vigil"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  gateway:
+    build:
+      context: .
+      dockerfile: deployments/docker/Dockerfile.gateway
+    environment:
+      DATABASE_URL: postgres://vigil:vigil@postgres:5432/vigil?sslmode=disable
+      GATEWAY_ADDR: ":8080"
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "/gateway", "healthcheck"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  ai:
+    build:
+      context: .
+      dockerfile: deployments/docker/Dockerfile.ai
+    environment:
+      AI_HTTP_ADDR: "0.0.0.0:8081"
+      AI_GRPC_ADDR: "0.0.0.0:50051"
+    ports:
+      - "8081:8081"
+      - "50051:50051"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8081/healthz')"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  web:
+    build:
+      context: .
+      dockerfile: deployments/docker/Dockerfile.web
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:8080
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8080
+    ports:
+      - "3000:3000"
+    depends_on:
+      gateway:
+        condition: service_healthy
+
+volumes:
+  postgres_data:

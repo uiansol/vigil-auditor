@@ -1,0 +1,64 @@
+syntax = "proto3";
+
+package auditor.v1;
+
+option go_package = "github.com/uiansol/vigil-auditor/pkg/auditorpb;auditorpb";
+
+// Auditor processes redacted bank statements and streams audit progress events.
+service Auditor {
+  rpc AuditStatement(AuditRequest) returns (stream AuditEvent);
+}
+
+message AuditRequest {
+  string audit_id = 1;
+  string file_name = 2;
+  string content_type = 3; // application/pdf | text/csv
+  bytes redacted_content = 4;
+}
+
+message AuditEvent {
+  oneof payload {
+    StageEvent stage = 1;
+    SubscriptionFound subscription_found = 2;
+    SummaryEvent summary = 3;
+    AuditResult result = 4;
+    ErrorEvent error = 5;
+  }
+}
+
+message StageEvent {
+  string stage = 1; // REDACTING | PARSING | MATCHING | ENRICHING | DETECTING_CREEP
+  string message = 2;
+}
+
+message SubscriptionFound {
+  string raw_merchant_name = 1;
+  string normalized_name = 2;
+  string billing_frequency = 3; // MONTHLY | ANNUAL | WEEKLY
+  double current_amount = 4;
+  double previous_amount = 5;
+  bool is_price_creep = 6;
+  double confidence_score = 7;
+  string first_detected_date = 8; // YYYY-MM-DD
+  string last_detected_date = 9;  // YYYY-MM-DD
+  string friction_level = 10;     // EASY | MEDIUM | HARD
+}
+
+message SummaryEvent {
+  double total_monthly_spend = 1;
+  double projected_annual_cost = 2;
+  int32 price_spike_count = 3;
+}
+
+message AuditResult {
+  string audit_id = 1;
+  string status = 2; // COMPLETED | FAILED
+  string failure_reason = 3;
+  SummaryEvent summary = 4;
+  repeated SubscriptionFound subscriptions = 5;
+}
+
+message ErrorEvent {
+  string code = 1;
+  string message = 2;
+}
