@@ -62,6 +62,8 @@ yarn-error.log*
 /uploads/
 *.pdf
 *.csv
+!testdata/**/*.csv
+!testdata/**/*.pdf
 
 # Local toolchain downloads (protoc binary, etc.)
 /tools/bin/

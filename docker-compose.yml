@@ -23,6 +23,9 @@ services:
     environment:
       DATABASE_URL: postgres://vigil:vigil@postgres:5432/vigil?sslmode=disable
       GATEWAY_ADDR: ":8080"
+      CORS_ORIGINS: http://localhost:3000
+      MAX_CONCURRENT_AUDITS: "4"
+      SSE_STAGE_DELAY_MS: "400"
     ports:
       - "8080:8080"
     depends_on:

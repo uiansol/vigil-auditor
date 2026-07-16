@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -16,8 +17,11 @@ import (
 // App is the Fiber HTTP gateway with database access.
 type App struct {
 	*fiber.App
+	cfg     Config
 	pool    *pgxpool.Pool
 	queries *db.Queries
+	jobs    *jobStore
+	sem     chan struct{}
 }
 
 // NewApp constructs the gateway, opens a Postgres pool, and registers routes.
@@ -35,16 +39,25 @@ func NewApp(cfg Config) (*App, func(), error) {
 	}
 
 	fiberApp := fiber.New(fiber.Config{
-		AppName: "vigil-gateway",
+		AppName:   "vigil-gateway",
+		BodyLimit: maxUploadBytes,
 	})
 	fiberApp.Use(recover.New())
 	fiberApp.Use(logger.New())
-	fiberApp.Use(cors.New())
+	fiberApp.Use(cors.New(cors.Config{
+		AllowOrigins:     strings.Join(cfg.CORSOrigins, ","),
+		AllowCredentials: true,
+		AllowHeaders:     "Origin, Content-Type, Accept, X-Session-Id",
+		AllowMethods:     "GET,POST,PATCH,OPTIONS",
+	}))
 
 	app := &App{
 		App:     fiberApp,
+		cfg:     cfg,
 		pool:    pool,
 		queries: db.New(pool),
+		jobs:    newJobStore(),
+		sem:     make(chan struct{}, cfg.MaxConcurrentAudits),
 	}
 	app.registerRoutes()
 
@@ -55,18 +68,40 @@ func NewApp(cfg Config) (*App, func(), error) {
 }
 
 // NewAppForTest builds a gateway without requiring a live database.
-// Health checks that need DB should inject a pool separately in integration tests.
 func NewAppForTest() *App {
+	cfg := Config{
+		CORSOrigins:         []string{"http://localhost:3000"},
+		MaxConcurrentAudits: 4,
+		StageDelay:          time.Millisecond,
+	}
 	fiberApp := fiber.New(fiber.Config{
-		AppName: "vigil-gateway-test",
+		AppName:   "vigil-gateway-test",
+		BodyLimit: maxUploadBytes,
 	})
-	app := &App{App: fiberApp}
+	fiberApp.Use(cors.New(cors.Config{
+		AllowOrigins:     "http://localhost:3000",
+		AllowCredentials: true,
+		AllowHeaders:     "Origin, Content-Type, Accept, X-Session-Id",
+		AllowMethods:     "GET,POST,PATCH,OPTIONS",
+	}))
+	app := &App{
+		App:  fiberApp,
+		cfg:  cfg,
+		jobs: newJobStore(),
+		sem:  make(chan struct{}, cfg.MaxConcurrentAudits),
+	}
 	app.registerRoutes()
 	return app
 }
 
 func (a *App) registerRoutes() {
 	a.Get("/healthz", a.handleHealthz)
+	a.Post("/api/v1/sessions", a.handleCreateSession)
+
+	api := a.Group("/api/v1", a.requireSession)
+	api.Post("/audits", a.handleCreateAudit)
+	api.Get("/audits/:id", a.handleGetAudit)
+	api.Get("/audits/:id/stream", a.handleAuditStream)
 }
 
 func (a *App) handleHealthz(c *fiber.Ctx) error {
