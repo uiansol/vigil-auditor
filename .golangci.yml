@@ -1,0 +1,20 @@
+run:
+  timeout: 5m
+  issues-exit-code: 1
+  tests: true
+
+linters:
+  disable-all: true
+  enable:
+    - errcheck      # Checks for unhandled errors
+    - goimports     # Fixes import formatting and ordering
+    - govet         # Standard Go analysis tool (catches copy locks, printf mistakes)
+    - staticcheck   # Applies highly advanced static analysis rules
+    - unused        # Flags unused constants, variables, functions, and types
+    - bodyclose     # Crucial for Vigil: checks whether HTTP response bodies are closed
+    - errname       # Checks that sentinel errors are named properly (e.g., ErrNotFound)
+
+issues:
+  exclude-use-default: false
+  max-issues-per-linter: 0
+  max-same-issues: 0
