@@ -1,3 +1,4 @@
+import { AuditUpload } from "@/components/AuditUpload";
 import { GatewayStatus } from "@/components/GatewayStatus";
 
 export default function Home() {
@@ -16,9 +17,10 @@ export default function Home() {
         </p>
       </div>
       <GatewayStatus />
+      <AuditUpload />
       <p className="text-sm text-stone-500">
-        Slice 0 skeleton — health checks only. Upload and audit arrive in later
-        slices.
+        Slice 1 — upload, in-memory redaction, and live SSE progress. Real
+        parsing arrives in Slice 2.
       </p>
     </main>
   );

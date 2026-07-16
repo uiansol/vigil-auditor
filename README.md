@@ -46,9 +46,9 @@ Not required for MVP: AWS ECS/ALB/RDS, S3+KMS spill, Terraform, real auth, Redis
 
 ---
 
-## Slice 0 — Skeleton (current)
+## Slice 1 — Upload + Redact + SSE (current)
 
-Compose brings up Postgres, Go gateway, Python AI, and Next dashboard. Health endpoints only — no upload/audit yet.
+Compose brings up Postgres, Go gateway, Python AI (unused stub), and Next dashboard. Demo sessions, multipart upload, in-memory regex redaction, and SSE with staged **fake** progress (stub `COMPLETED`). Real CSV parsing lands in Slice 2.
 
 ### Prerequisites
 
@@ -64,12 +64,18 @@ Compose brings up Postgres, Go gateway, Python AI, and Next dashboard. Health en
 cp .env.example .env
 docker compose up --build -d
 
-curl -sf http://localhost:8080/healthz   # gateway (+ DB ping)
-curl -sf http://localhost:8081/healthz   # AI HTTP
-curl -sf http://localhost:3000           # dashboard shell
+curl -sf http://localhost:8080/healthz
+curl -sf http://localhost:3000
 
-docker compose ps   # gateway + ai should be healthy
+# CLI upload + SSE demo
+curl -c /tmp/vigil.txt -X POST http://localhost:8080/api/v1/sessions
+AUDIT=$(curl -s -b /tmp/vigil.txt -F file=@testdata/statements/sample_with_pii.csv \
+  http://localhost:8080/api/v1/audits | tee /dev/stderr | sed -n 's/.*"audit_id":"\([^"]*\)".*/\1/p')
+curl -N -b /tmp/vigil.txt "http://localhost:8080/api/v1/audits/${AUDIT}/stream"
+curl -s -b /tmp/vigil.txt "http://localhost:8080/api/v1/audits/${AUDIT}"
 ```
+
+Or use the dashboard upload UI at http://localhost:3000 (session cookie + live stages).
 
 ### Quickstart B — hybrid (Compose backend + host Next)
 

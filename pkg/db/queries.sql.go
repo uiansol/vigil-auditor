@@ -7,6 +7,8 @@ package db
 
 import (
 	"context"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const checkDB = `-- name: CheckDB :one
@@ -18,4 +20,135 @@ func (q *Queries) CheckDB(ctx context.Context) (int32, error) {
 	var ok int32
 	err := row.Scan(&ok)
 	return ok, err
+}
+
+const createAuditReport = `-- name: CreateAuditReport :one
+INSERT INTO audit_reports (session_id, file_name, status)
+VALUES ($1, $2, 'PROCESSING')
+RETURNING id, session_id, file_name, status, failure_reason,
+          total_monthly_spend, projected_annual_cost, price_spike_count,
+          created_at, completed_at
+`
+
+type CreateAuditReportParams struct {
+	SessionID pgtype.UUID
+	FileName  string
+}
+
+func (q *Queries) CreateAuditReport(ctx context.Context, arg CreateAuditReportParams) (AuditReport, error) {
+	row := q.db.QueryRow(ctx, createAuditReport, arg.SessionID, arg.FileName)
+	var i AuditReport
+	err := row.Scan(
+		&i.ID,
+		&i.SessionID,
+		&i.FileName,
+		&i.Status,
+		&i.FailureReason,
+		&i.TotalMonthlySpend,
+		&i.ProjectedAnnualCost,
+		&i.PriceSpikeCount,
+		&i.CreatedAt,
+		&i.CompletedAt,
+	)
+	return i, err
+}
+
+const createDemoSession = `-- name: CreateDemoSession :one
+INSERT INTO demo_sessions (expires_at)
+VALUES ($1)
+RETURNING id, created_at, expires_at
+`
+
+func (q *Queries) CreateDemoSession(ctx context.Context, expiresAt pgtype.Timestamptz) (DemoSession, error) {
+	row := q.db.QueryRow(ctx, createDemoSession, expiresAt)
+	var i DemoSession
+	err := row.Scan(&i.ID, &i.CreatedAt, &i.ExpiresAt)
+	return i, err
+}
+
+const getAuditReportForSession = `-- name: GetAuditReportForSession :one
+SELECT id, session_id, file_name, status, failure_reason,
+       total_monthly_spend, projected_annual_cost, price_spike_count,
+       created_at, completed_at
+FROM audit_reports
+WHERE id = $1 AND session_id = $2
+`
+
+type GetAuditReportForSessionParams struct {
+	ID        pgtype.UUID
+	SessionID pgtype.UUID
+}
+
+func (q *Queries) GetAuditReportForSession(ctx context.Context, arg GetAuditReportForSessionParams) (AuditReport, error) {
+	row := q.db.QueryRow(ctx, getAuditReportForSession, arg.ID, arg.SessionID)
+	var i AuditReport
+	err := row.Scan(
+		&i.ID,
+		&i.SessionID,
+		&i.FileName,
+		&i.Status,
+		&i.FailureReason,
+		&i.TotalMonthlySpend,
+		&i.ProjectedAnnualCost,
+		&i.PriceSpikeCount,
+		&i.CreatedAt,
+		&i.CompletedAt,
+	)
+	return i, err
+}
+
+const getDemoSession = `-- name: GetDemoSession :one
+SELECT id, created_at, expires_at
+FROM demo_sessions
+WHERE id = $1
+`
+
+func (q *Queries) GetDemoSession(ctx context.Context, id pgtype.UUID) (DemoSession, error) {
+	row := q.db.QueryRow(ctx, getDemoSession, id)
+	var i DemoSession
+	err := row.Scan(&i.ID, &i.CreatedAt, &i.ExpiresAt)
+	return i, err
+}
+
+const updateAuditStatus = `-- name: UpdateAuditStatus :one
+UPDATE audit_reports
+SET status = $3,
+    failure_reason = $4,
+    completed_at = $5
+WHERE id = $1 AND session_id = $2
+RETURNING id, session_id, file_name, status, failure_reason,
+          total_monthly_spend, projected_annual_cost, price_spike_count,
+          created_at, completed_at
+`
+
+type UpdateAuditStatusParams struct {
+	ID            pgtype.UUID
+	SessionID     pgtype.UUID
+	Status        string
+	FailureReason pgtype.Text
+	CompletedAt   pgtype.Timestamptz
+}
+
+func (q *Queries) UpdateAuditStatus(ctx context.Context, arg UpdateAuditStatusParams) (AuditReport, error) {
+	row := q.db.QueryRow(ctx, updateAuditStatus,
+		arg.ID,
+		arg.SessionID,
+		arg.Status,
+		arg.FailureReason,
+		arg.CompletedAt,
+	)
+	var i AuditReport
+	err := row.Scan(
+		&i.ID,
+		&i.SessionID,
+		&i.FileName,
+		&i.Status,
+		&i.FailureReason,
+		&i.TotalMonthlySpend,
+		&i.ProjectedAnnualCost,
+		&i.PriceSpikeCount,
+		&i.CreatedAt,
+		&i.CompletedAt,
+	)
+	return i, err
 }
